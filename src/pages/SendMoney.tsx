@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ContactItem } from '@/components/ContactItem';
 import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { BottomNav } from '@/components/BottomNav';
@@ -14,13 +16,16 @@ import { NetworkStatusIndicator } from '@/components/NetworkStatusIndicator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { useCompliance } from '@/contexts/ComplianceContext';
-import { contacts } from '@/data/mockData';
+import { contacts, transactions as mockTransactions } from '@/data/mockData';
 import { useExchangeRate } from '@/hooks/useExchangeRate';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useCountryInfo } from '@/hooks/useCountryInfo';
+import { useTransferDraft } from '@/hooks/useTransferDraft';
+import { useTransferSuggestions } from '@/hooks/useTransferSuggestions';
 import { Contact, TransactionPreview } from '@/types';
-import { ArrowLeft, ArrowRight, Search, DollarSign, Send, CheckCircle2, UserPlus, Mail, Phone, MessageCircle, Shield, Zap, Globe2, Star, Wallet, MapPin, AlertTriangle, CloudOff } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search, DollarSign, Send, CheckCircle2, UserPlus, Mail, Phone, MessageCircle, Shield, Zap, Globe2, Star, Wallet, MapPin, AlertTriangle, CloudOff, Sparkles, Clock, RotateCcw, Tag } from 'lucide-react';
 import { toast } from 'sonner';
+import { TRANSFER_PURPOSES, getPurposeByCode } from '@/data/transferPurposes';
 import {
   createTransfer,
   fetchTransferFeeEstimate,
@@ -112,8 +117,13 @@ export default function SendMoney() {
   } | null>(null);
   const [isBulkSending, setIsBulkSending] = useState(false);
   const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [purposeCode, setPurposeCode] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
   const { rates, convert, changes } = useExchangeRate();
   const { data: countryInfo, isLoading: countryInfoLoading, isError: countryInfoError } = useCountryInfo(selectedContact?.countryCode ?? null);
+  const draft = useTransferDraft('send_money_current');
+  const suggestions = useTransferSuggestions(contacts, mockTransactions);
 
   const parsedBulkTransfers = useMemo(() => {
     const lines = bulkInput
@@ -169,19 +179,19 @@ export default function SendMoney() {
     [bulkValidTransfers],
   );
 
-  const countryToCurrency: Record<string, string> = {
+  const countryToCurrency = useMemo<Record<string, string>>(() => ({
     'MX': 'MXN',
     'PH': 'PHP',
     'GT': 'GTQ',
     'SV': 'USD',
-  };
+  }), []);
 
-  const getRecipientCurrency = (contact: Contact | null) => {
+  const getRecipientCurrency = useCallback((contact: Contact | null) => {
     if (!contact) return 'USD';
     return countryToCurrency[contact.countryCode] || 'USD';
-  };
+  }, [countryToCurrency]);
 
-  const recipientCurrency = useMemo(() => getRecipientCurrency(selectedContact), [selectedContact]);
+  const recipientCurrency = useMemo(() => getRecipientCurrency(selectedContact), [selectedContact, getRecipientCurrency]);
   const selectedCashOutMethod = useMemo(() => countryInfo?.cashOutMethods?.[0] ?? null, [countryInfo]);
 
   const filteredContacts = useMemo(
@@ -251,6 +261,40 @@ export default function SendMoney() {
   useEffect(() => {
     setSimulationResult(null);
   }, [amountValue, selectedContact?.id, newRecipient?.identifier]);
+
+  useEffect(() => {
+    const saved = draft.restore();
+    if (saved) {
+      if (saved.recipientIdentifier && !selectedContact && !newRecipient) {
+        setRecipientInput(saved.recipientIdentifier);
+      }
+      if (saved.amount && !amount) {
+        setAmount(saved.amount);
+      }
+      if (saved.purposeCode) {
+        setPurposeCode(saved.purposeCode);
+      }
+      if (saved.notes) {
+        setNotes(saved.notes);
+      }
+      if (saved.recipientIdentifier || saved.amount) {
+        setShowDraftBanner(true);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (selectedContact || newRecipient || amount || purposeCode || notes) {
+      draft.persist({
+        recipientIdentifier: selectedContact?.phone || newRecipient?.identifier,
+        recipientName: selectedContact?.name || newRecipient?.name,
+        amount: amount || undefined,
+        purposeCode: purposeCode || undefined,
+        notes: notes || undefined,
+      });
+    }
+  }, [selectedContact, newRecipient, amount, purposeCode, notes, draft]);
 
   const amountError = useMemo(() => {
     if (!amount.trim()) return "Amount is required";
@@ -332,6 +376,8 @@ export default function SendMoney() {
           initiated_from: "send_money_page",
           network_fee: fees.networkFee,
           service_fee: fees.serviceFee,
+          purpose_code: purposeCode || undefined,
+          notes: notes || undefined,
           ...(extraMetadata || {}),
         },
       };
@@ -343,6 +389,8 @@ export default function SendMoney() {
       fees.serviceFee,
       multisigConfig,
       newRecipient,
+      notes,
+      purposeCode,
       selectedCashOutMethod,
       selectedContact,
       user,
@@ -512,6 +560,13 @@ export default function SendMoney() {
     }
 
     if (isNetworkOffline) {
+      draft.saveNow({
+        recipientIdentifier: selectedContact?.phone || newRecipient?.identifier,
+        recipientName: selectedContact?.name || newRecipient?.name,
+        amount: amount || undefined,
+        purposeCode: purposeCode || undefined,
+        notes: notes || undefined,
+      });
       setSubmissionError(networkBlockingMessage);
       toast.error(networkBlockingMessage);
       return;
@@ -563,7 +618,7 @@ export default function SendMoney() {
     // PIN verified, proceed with transfer
     setSubmissionError(null);
     await processTransfer();
-  }, [pin, transactionPin]);
+  }, [pin, transactionPin, processTransfer]);
 
   const handlePinChange = (index: number, value: string) => {
     if (value.length > 1) value = value.slice(-1);
@@ -590,6 +645,13 @@ export default function SendMoney() {
     }
 
     if (isNetworkOffline) {
+      draft.saveNow({
+        recipientIdentifier: selectedContact?.phone || newRecipient?.identifier,
+        recipientName: selectedContact?.name || newRecipient?.name,
+        amount: amount || undefined,
+        purposeCode: purposeCode || undefined,
+        notes: notes || undefined,
+      });
       setSubmissionError(networkBlockingMessage);
       toast.error(networkBlockingMessage);
       return;
@@ -619,6 +681,7 @@ export default function SendMoney() {
 
     try {
       await submitTransfer();
+      draft.discard();
       setStep("success");
       toast.success("Transfer submitted successfully");
     } catch (error: unknown) {
@@ -629,7 +692,7 @@ export default function SendMoney() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, showWalletSigning, isNetworkOffline, networkBlockingMessage, connectionState.isConnected, useExternalWallet, selectedContact, newRecipient, amount, submitTransfer]);
+  }, [isProcessing, showWalletSigning, isNetworkOffline, networkBlockingMessage, connectionState.isConnected, useExternalWallet, selectedContact, newRecipient, amount, purposeCode, notes, fees.networkFee, submitTransfer, draft]);
 
   const handleWalletTransactionSuccess = async (txHash: string) => {
     setShowWalletSigning(false);
@@ -824,15 +887,20 @@ export default function SendMoney() {
         <div className="max-w-lg mx-auto flex items-center gap-3 sm:gap-4">
           <button
             onClick={handleBack}
-            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+            className="p-2 rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label={step === "recipient" ? "Back to dashboard" : "Back to previous step"}
           >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
+            <ArrowLeft className="w-5 h-5 text-foreground" aria-hidden="true" />
           </button>
           <h1 className="text-lg font-bold text-foreground">
             {step === "recipient" && "Send Money"}
             {step === "amount" && "Enter Amount"}
             {step === "confirm" && "Confirm Transfer"}
+            {step === "pin" && (showPinSetup ? "Set Transaction PIN" : "Enter PIN")}
           </h1>
+          <span className="sr-only" role="status">
+            Step {step === "recipient" ? "1 of 5" : step === "amount" ? "2 of 5" : step === "confirm" ? "3 of 5" : step === "pin" ? "4 of 5" : "5 of 5"}
+          </span>
         </div>
       </header>
 
@@ -882,12 +950,12 @@ export default function SendMoney() {
 
                 <p className="text-xs text-muted-foreground mt-2">
                   {recipientInputType === "email" &&
-                    "📧 We will send a secure link to their email"}
+                    "We will send a secure link to their email"}
                   {recipientInputType === "phone" &&
-                    "📱 We will send a secure SMS to their phone"}
+                    "We will send a secure SMS to their phone"}
                   {!recipientInputType &&
                     recipientInput &&
-                    "⚠️ Please enter a valid email or phone number"}
+                    "Please enter a valid email or phone number"}
                   {!recipientInput &&
                     "Enter an email address or phone number to send money instantly"}
                 </p>
@@ -946,6 +1014,101 @@ export default function SendMoney() {
                   </div>
                 )}
               </div>
+
+              {/* Smart Suggestions - Frequently Sent Recipients */}
+              {suggestions.recipients.length > 0 && !searchQuery && (
+                <div className="space-y-3" role="region" aria-label="Frequently sent recipients">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Frequently Sent
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.recipients.slice(0, 5).map((recipient) => (
+                      <button
+                        key={recipient.id}
+                        onClick={() => {
+                          const contact = contacts.find((c) => c.id === recipient.id);
+                          if (contact) handleSelectContact(contact);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border/60 hover:bg-secondary/50 transition-colors text-sm"
+                        aria-label={`Send to ${recipient.name}, sent ${recipient.frequency} times`}
+                      >
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                        <span className="font-medium text-foreground">{recipient.name}</span>
+                        <span className="text-xs text-muted-foreground">({recipient.frequency}x)</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Smart Suggestions - Frequent Amounts */}
+              {suggestions.amounts.length > 0 && step === 'amount' && (
+                <div className="space-y-3" role="region" aria-label="Frequently sent amounts">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Frequent Amounts
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.amounts.slice(0, 3).map((suggestion) => (
+                      <button
+                        key={suggestion.amount}
+                        onClick={() => setAmount(suggestion.amount.toString())}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border/60 hover:bg-secondary/50 transition-colors text-sm"
+                        aria-label={`$${suggestion.amount} frequent amount`}
+                      >
+                        <DollarSign className="w-3 h-3 text-muted-foreground" />
+                        <span className="font-medium text-foreground">${suggestion.amount}</span>
+                        {suggestion.recipientName && (
+                          <span className="text-xs text-muted-foreground">
+                            to {suggestion.recipientName}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Draft Restore Banner */}
+              {showDraftBanner && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3"
+                  role="alert"
+                >
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-amber-600" />
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Unfinished transfer found
+                    </p>
+                  </div>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    You have a draft from a previous session. You can restore it or discard it.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                      onClick={() => {
+                        draft.discard();
+                        setShowDraftBanner(false);
+                        setRecipientInput('');
+                        setAmount('');
+                        setPurposeCode('');
+                        setNotes('');
+                        toast.success('Draft discarded');
+                      }}
+                    >
+                      Discard Draft
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -1126,7 +1289,7 @@ export default function SendMoney() {
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <DollarSign className="w-10 h-10 text-primary" />
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
@@ -1134,6 +1297,7 @@ export default function SendMoney() {
                     placeholder="0.00"
                     className="text-4xl sm:text-5xl md:text-6xl font-bold text-foreground bg-transparent border-none outline-none w-40 sm:w-56 md:w-64 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     autoFocus
+                    aria-label="Enter amount to send"
                   />
                   <span className="text-xl sm:text-2xl font-semibold text-muted-foreground">
                     USDC
@@ -1222,11 +1386,11 @@ export default function SendMoney() {
                                   )}
                                 </div>
                               )}
-                              {complianceCheck.upgradeIncentive && (
-                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
-                                  💡 {complianceCheck.upgradeIncentive}
-                                </p>
-                              )}
+                  {complianceCheck.upgradeIncentive && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
+                      {complianceCheck.upgradeIncentive}
+                    </p>
+                  )}
                             </div>
                           </div>
                         </div>
@@ -1235,8 +1399,45 @@ export default function SendMoney() {
                     return null;
                   })()}
 
+                {/* Transfer Purpose */}
+                <div className="mt-6 text-left">
+                  <Label htmlFor="purpose" className="text-sm font-medium text-foreground">
+                    Transfer Purpose
+                  </Label>
+                  <Select value={purposeCode} onValueChange={setPurposeCode}>
+                    <SelectTrigger id="purpose" className="w-full mt-1" aria-label="Select transfer purpose">
+                      <SelectValue placeholder="Select purpose (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSFER_PURPOSES.map((purpose) => (
+                        <SelectItem key={purpose.code} value={purpose.code}>
+                          <span className="flex items-center gap-2">
+                            <Tag className="w-4 h-4 text-muted-foreground" />
+                            {purpose.label}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Notes */}
+                <div className="mt-3 text-left">
+                  <Label htmlFor="notes" className="text-sm font-medium text-foreground">
+                    Notes
+                  </Label>
+                  <textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add a note (optional)"
+                    className="w-full mt-1 rounded-xl border border-border/60 bg-background p-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 resize-none"
+                    rows={2}
+                  />
+                </div>
+
                 {/* Quick Amount Buttons */}
-                <div className="flex gap-2 justify-center mt-6">
+                <div className="flex gap-2 justify-center mt-6" role="group" aria-label="Quick amount options">
                   {[10, 25, 50, 100].map((quickAmount) => (
                     <Button
                       key={quickAmount}
@@ -1244,6 +1445,7 @@ export default function SendMoney() {
                       size="sm"
                       onClick={() => setAmount(quickAmount.toString())}
                       disabled={quickAmount > (user?.usdcBalance || 0)}
+                      aria-label={`$${quickAmount} quick amount`}
                     >
                       ${quickAmount}
                     </Button>
@@ -1294,7 +1496,7 @@ export default function SendMoney() {
                                 )}
                                 {complianceCheck.upgradeIncentive && (
                                   <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
-                                    💡 {complianceCheck.upgradeIncentive}
+                                    {complianceCheck.upgradeIncentive}
                                   </p>
                                 )}
                               </div>
@@ -1451,7 +1653,22 @@ export default function SendMoney() {
                 </div>
               )}
 
-              {/* Detailed Fee Breakdown */}
+                {/* Transfer Purpose & Notes */}
+                {purposeCode && (
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Tag className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">
+                        {getPurposeByCode(purposeCode)?.label || purposeCode}
+                      </span>
+                    </div>
+                    {notes && (
+                      <p className="text-xs text-muted-foreground mt-1">{notes}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Detailed Fee Breakdown */}
               <FeeBreakdown amount={parseFloat(amount)} />
 
               {/* Country Summary — shown when countryInfo and selectedCashOutMethod are available (Req 5.1) */}
@@ -1659,7 +1876,7 @@ export default function SendMoney() {
                 </p>
               </div>
 
-              <div className="flex justify-center gap-3 mb-6">
+              <div className="flex justify-center gap-3 mb-6" role="group" aria-label="PIN input">
                 {pin.map((digit, index) => (
                   <Input
                     key={index}
@@ -1672,6 +1889,7 @@ export default function SendMoney() {
                     onKeyDown={(e) => handlePinKeyDown(index, e)}
                     className="w-14 h-14 text-center text-2xl font-semibold"
                     autoFocus={index === 0}
+                    aria-label={`PIN digit ${index + 1}`}
                   />
                 ))}
               </div>

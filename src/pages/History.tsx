@@ -1,5 +1,5 @@
 import { useCallback, useState, useMemo } from 'react';
-import { ChevronDown, Search, Filter, Calendar, Banknote, TrendingUp, Clock, ArrowLeft, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, Search, Filter, Calendar, Banknote, TrendingUp, Clock, ArrowLeft, Download, FileText, FileSpreadsheet, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { exportToCSV, exportToPDF } from '@/lib/export';
@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useNavigate } from 'react-router-dom';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Bar, BarChart, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
+import { getPurposeByCode, TRANSFER_PURPOSES } from '@/data/transferPurposes';
 
 const History: React.FC = () => {
   const { user } = useAuth();
@@ -50,10 +51,11 @@ const History: React.FC = () => {
                            transaction.recipientPhone?.includes(searchTerm);
       const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
       const matchesType = typeFilter === 'all' || transaction.type === typeFilter;
+      const matchesPurpose = purposeFilter === 'all' || transaction.purposeCode === purposeFilter;
       
-      return matchesSearch && matchesStatus && matchesType;
+      return matchesSearch && matchesStatus && matchesType && matchesPurpose;
     });
-  }, [user?.transactions, searchTerm, statusFilter, typeFilter]);
+  }, [user?.transactions, searchTerm, statusFilter, typeFilter, purposeFilter]);
 
   const monthlyTransferData = useMemo(() => {
     const monthlyMap = new Map<string, { month: string; sent: number; received: number }>();
@@ -77,7 +79,8 @@ const History: React.FC = () => {
     (user?.transactions || [])
       .filter((transaction) => transaction.type === 'send')
       .forEach((transaction) => {
-        const category = transaction.destinationCurrency ? `${transaction.destinationCurrency} transfer` : 'General transfers';
+        const purpose = transaction.purposeCode ? getPurposeByCode(transaction.purposeCode) : null;
+        const category = purpose?.label || (transaction.destinationCurrency ? `${transaction.destinationCurrency} transfer` : 'General transfers');
         categoryMap.set(category, (categoryMap.get(category) ?? 0) + transaction.amount);
       });
 
@@ -88,10 +91,13 @@ const History: React.FC = () => {
     setExpandedTransactionId((currentId) => (currentId === transactionId ? null : transactionId));
   }, []);
 
+  const [purposeFilter, setPurposeFilter] = useState<string>('all');
+
   const clearFilters = useCallback(() => {
     setSearchTerm('');
     setStatusFilter('all');
     setTypeFilter('all');
+    setPurposeFilter('all');
   }, []);
 
   const statusOptions = [
@@ -118,9 +124,10 @@ const History: React.FC = () => {
                 variant="ghost" 
                 size="sm" 
                 onClick={handleGoBack}
-                className="p-2 h-auto"
+                className="p-2 h-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label="Go back"
               >
-                <ArrowLeft className="w-5 h-5 text-foreground" />
+                <ArrowLeft className="w-5 h-5 text-foreground" aria-hidden="true" />
               </Button>
               <h1 className="text-2xl font-bold text-foreground">Transaction History</h1>
             </div>
@@ -128,17 +135,17 @@ const History: React.FC = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="flex items-center gap-2">
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4" aria-hidden="true" />
                   <span>Export</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => exportToCSV(filteredTransactions)} className="cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                  <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" aria-hidden="true" />
                   <span>Export as CSV</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => exportToPDF(filteredTransactions)} className="cursor-pointer">
-                  <FileText className="w-4 h-4 mr-2 text-red-500" />
+                  <FileText className="w-4 h-4 mr-2 text-red-500" aria-hidden="true" />
                   <span>Export as PDF</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -257,6 +264,7 @@ const History: React.FC = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 bg-card border-border/50"
+              aria-label="Search transactions"
             />
           </div>
 
@@ -300,6 +308,29 @@ const History: React.FC = () => {
                     className="text-xs"
                   >
                     {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  key="all-purposes"
+                  variant={purposeFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPurposeFilter('all')}
+                  className="text-xs"
+                >
+                  All Purposes
+                </Button>
+                {TRANSFER_PURPOSES.map((purpose) => (
+                  <Button
+                    key={purpose.code}
+                    variant={purposeFilter === purpose.code ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setPurposeFilter(purpose.code)}
+                    className="text-xs"
+                  >
+                    <Tag className="w-3 h-3 mr-1" />
+                    {purpose.label}
                   </Button>
                 ))}
               </div>

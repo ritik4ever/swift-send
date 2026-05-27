@@ -27,14 +27,15 @@ export function FeeBreakdown({
         'bg-card rounded-xl p-5 shadow-card space-y-4 animate-scale-in border border-border/50',
         className
       )}
+      aria-label="Fee breakdown"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Info className="w-4 h-4 text-blue-600" />
+          <Info className="w-4 h-4 text-blue-600" aria-hidden="true" />
           Fee Transparency
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Star className="w-3 h-3 text-blue-500" />
+          <Star className="w-3 h-3 text-blue-500" aria-hidden="true" />
           <span>Stellar Network</span>
         </div>
       </div>
@@ -50,7 +51,7 @@ export function FeeBreakdown({
         <div className="space-y-2">
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Star className="w-4 h-4 text-blue-500" />
+              <Star className="w-4 h-4 text-blue-500" aria-hidden="true" />
               <span>Stellar network fee</span>
             </div>
             <span className="font-medium text-foreground">${fees.networkFee.toFixed(4)}</span>
@@ -58,7 +59,7 @@ export function FeeBreakdown({
 
           <div className="flex justify-between items-center text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Shield className="w-4 h-4 text-green-500" />
+              <Shield className="w-4 h-4 text-green-500" aria-hidden="true" />
               <span>Service fee (0.5%)</span>
             </div>
             <span className="font-medium text-foreground">${fees.serviceFee.toFixed(2)}</span>
@@ -77,7 +78,7 @@ export function FeeBreakdown({
       <div className="bg-gradient-to-r from-green-50 to-green-50/50 dark:from-green-900/20 dark:to-green-900/10 rounded-lg p-4 border border-green-200/50 dark:border-green-800/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ArrowRight className="w-5 h-5 text-green-600" />
+            <ArrowRight className="w-5 h-5 text-green-600" aria-hidden="true" />
             <span className="font-semibold text-foreground">Recipient receives</span>
           </div>
           <span className="text-2xl font-bold text-green-600">
@@ -92,7 +93,7 @@ export function FeeBreakdown({
       {/* Professional comparison */}
       <div className="bg-slate-50 dark:bg-slate-900/30 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2 mb-3">
-          <Globe2 className="w-4 h-4 text-slate-600" />
+          <Globe2 className="w-4 h-4 text-slate-600" aria-hidden="true" />
           <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
             Institutional-Grade Infrastructure
           </span>

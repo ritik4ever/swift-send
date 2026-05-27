@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -12,7 +13,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { TrendingUp, DollarSign, CheckCircle2, XCircle, BarChart3, Tag } from 'lucide-react';
+import { TrendingUp, DollarSign, CheckCircle2, XCircle, BarChart3, Tag, List } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,6 +22,7 @@ import { ComparativeInsights } from '@/components/ComparativeInsights';
 import { BottomNav } from '@/components/BottomNav';
 import { fetchSpendingInsights } from '@/lib/activity';
 import type { SpendingInsights } from '@/types/activity';
+import { TRANSFER_PURPOSES, getPurposeByCode } from '@/data/transferPurposes';
 
 const CATEGORY_COLORS = [
   'hsl(var(--primary))',
@@ -61,6 +63,7 @@ export default function InsightsDashboard() {
             <MonthlyTrendsChart data={data?.monthlyTransferData} isLoading={isLoading} />
             <ComparativeInsights data={data?.monthlyTransferData} isLoading={isLoading} />
             <CategoryBreakdownChart data={data?.categoryData} isLoading={isLoading} />
+            <PurposeBreakdownChart topExpenses={data?.topExpenses} />
             <TopExpensesList expenses={data?.topExpenses} isLoading={isLoading} />
           </>
         )}
@@ -305,6 +308,60 @@ function TopExpensesList({
             ))}
           </ul>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PurposeBreakdownChart({
+  topExpenses,
+}: {
+  topExpenses?: SpendingInsights['topExpenses'];
+}) {
+  const purposeData = useMemo(() => {
+    if (!topExpenses || topExpenses.length === 0) return [];
+    const map = new Map<string, number>();
+    for (const expense of topExpenses) {
+      const purpose = expense.category ? getPurposeByCode(expense.category) : null;
+      const label = purpose?.label || expense.category || 'Other';
+      map.set(label, (map.get(label) ?? 0) + expense.amount);
+    }
+    return Array.from(map.entries())
+      .map(([category, value]) => ({ category, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [topExpenses]);
+
+  if (purposeData.length === 0) return null;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <List className="w-4 h-4 text-primary" />
+          Transfers by Purpose
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {purposeData.map((item) => {
+            const total = purposeData.reduce((sum, d) => sum + d.value, 0);
+            const percentage = total > 0 ? (item.value / total) * 100 : 0;
+            return (
+              <div key={item.category} className="flex items-center gap-3">
+                <span className="text-sm text-foreground w-32 truncate">{item.category}</span>
+                <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground w-20 text-right">
+                  ${item.value.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

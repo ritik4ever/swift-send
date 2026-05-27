@@ -27,16 +27,19 @@ export function NetworkStatusIndicator({ network, compact = false }: NetworkStat
         'rounded-xl border px-4 py-3',
         isOffline ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200'
       )}
+      role="status"
+      aria-live="polite"
+      aria-label={`Stellar network ${isOffline ? 'offline' : 'online'}`}
     >
       <div className={cn('flex items-center justify-between gap-3', compact && 'flex-wrap')}>
         <div className="flex items-center gap-2">
-          {isOffline ? <CloudOff className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
+          {isOffline ? <CloudOff className="h-4 w-4" aria-hidden="true" /> : <Wifi className="h-4 w-4" aria-hidden="true" />}
           <span className="text-sm font-medium">
             Stellar network {isOffline ? 'offline' : 'online'}
           </span>
         </div>
         <Badge variant="secondary" className={cn(isOffline && 'bg-destructive/15 text-destructive')}>
-          <Activity className="mr-1 h-3 w-3" />
+          <Activity className="mr-1 h-3 w-3" aria-hidden="true" />
           {latencyLabel(network.latencyMs)}
         </Badge>
       </div>
