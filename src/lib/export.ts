@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 export function exportToCSV(transactions: Transaction[], filename: string = 'transaction_history.csv') {
   if (transactions.length === 0) return;
 
-  const headers = ['Date', 'Type', 'Amount', 'Recipient Name', 'Recipient Phone', 'Status', 'Transaction ID'];
+  const headers = ['Date', 'Type', 'Amount', 'Recipient Name', 'Recipient Phone', 'Status', 'Purpose', 'Notes', 'Transaction ID'];
   
   const rows = transactions.map(t => [
     new Date(t.timestamp).toISOString(),
@@ -19,6 +19,8 @@ export function exportToCSV(transactions: Transaction[], filename: string = 'tra
     `"${t.recipientName}"`,
     `"${t.recipientPhone}"`,
     t.status,
+    t.purposeCode || '',
+    `"${(t.notes || '').replace(/"/g, '""')}"`,
     t.id
   ]);
 
@@ -58,12 +60,13 @@ export function exportToPDF(transactions: Transaction[], filename: string = 'tra
   doc.text(`Total Records: ${transactions.length}`, 14, 36);
 
   // Table Data
-  const tableColumn = ['Date', 'Type', 'Amount', 'Recipient', 'Status'];
+  const tableColumn = ['Date', 'Type', 'Amount', 'Recipient', 'Purpose', 'Status'];
   const tableRows = transactions.map(t => [
     format(new Date(t.timestamp), 'PP'),
     t.type.toUpperCase(),
     `$${t.amount.toFixed(2)}`,
     t.recipientName,
+    t.purposeCode || '-',
     t.status.toUpperCase(),
   ]);
 

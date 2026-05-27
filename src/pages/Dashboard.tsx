@@ -70,7 +70,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 mb-1">
               <p className="text-sm text-muted-foreground">Welcome back,</p>
               <div className="flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-full">
-                <CheckCircle2 className="w-3 h-3 text-green-600" />
+                <CheckCircle2 className="w-3 h-3 text-green-600" aria-hidden="true" />
                 <span className="text-xs font-medium text-green-800 dark:text-green-200">Verified</span>
               </div>
               <WalletStatusIndicator />
@@ -80,11 +80,11 @@ export default function Dashboard() {
             </h1>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
-                <Star className="w-3 h-3 text-blue-500" />
+                <Star className="w-3 h-3 text-blue-500" aria-hidden="true" />
                 <span>Stellar Network</span>
               </div>
               <div className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-green-500" />
+                <Shield className="w-3 h-3 text-green-500" aria-hidden="true" />
                 <span>FDIC Protected</span>
               </div>
             </div>
@@ -92,10 +92,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <button
-              className="relative p-3 rounded-xl bg-card shadow-card hover:bg-secondary transition-colors"
+              className="relative p-3 rounded-xl bg-card shadow-card hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               onClick={() => navigate('/history')}
+              aria-label={`Notifications${unreadNotifications > 0 ? `, ${unreadNotifications} unread` : ''}`}
             >
-              <Bell className="w-5 h-5 text-foreground" />
+              <Bell className="w-5 h-5 text-foreground" aria-hidden="true" />
               {unreadNotifications > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground flex items-center justify-center">
                   {unreadNotifications}
@@ -308,7 +309,7 @@ export default function Dashboard() {
               className="w-full h-16 text-lg font-semibold"
               onClick={() => navigate('/send')}
             >
-              <Send className="w-6 h-6" />
+              <Send className="w-6 h-6" aria-hidden="true" />
               Send Money
             </Button>
             
@@ -319,7 +320,7 @@ export default function Dashboard() {
                 className="h-14"
                 onClick={() => navigate('/add-funds')}
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-5 h-5" aria-hidden="true" />
                 Add Funds
               </Button>
               <Button
@@ -328,7 +329,7 @@ export default function Dashboard() {
                 className="h-14"
                 onClick={() => navigate('/withdraw')}
               >
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-5 h-5" aria-hidden="true" />
                 Cash Out
               </Button>
             </div>
@@ -338,7 +339,7 @@ export default function Dashboard() {
               className="w-full"
               onClick={() => navigate('/history')}
             >
-              <Clock className="w-4 h-4 mr-2" />
+              <Clock className="w-4 h-4 mr-2" aria-hidden="true" />
               View Transaction History
             </Button>
           </div>

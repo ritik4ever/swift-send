@@ -27,13 +27,13 @@ export function BalanceCard({ usdcBalance, localCurrency, exchangeRate, lockedBa
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-primary-foreground/20">
+          <div className="p-2 rounded-lg bg-primary-foreground/20" aria-hidden="true">
             <Wallet className="w-5 h-5" />
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium opacity-90">USDC Balance</span>
             <div className="flex items-center gap-1 text-xs opacity-75">
-              <Star className="w-3 h-3" />
+              <Star className="w-3 h-3" aria-hidden="true" />
               <span>Stellar Network</span>
             </div>
           </div>
