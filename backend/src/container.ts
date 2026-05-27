@@ -22,6 +22,10 @@ import { ComplianceLogService } from "./modules/compliance/complianceLogService"
 import { ErrorLogService } from "./modules/system/errorLogService";
 import { StellarFeeService } from "./services/stellarFeeService";
 import { registerTransferEventHandlers } from "./modules/transfers/transferEventHandlers";
+import { DeadLetterQueue } from "./modules/transfers/deadLetterQueue";
+import { StellarMonitorService } from "./modules/system/stellarMonitorService";
+import { AuthRiskEngine } from "./auth/riskEngine";
+import { SettlementAnalyticsService } from "./modules/transfers/settlementAnalyticsService";
 
 export interface AppContainer {
   config: AppConfig;
@@ -43,6 +47,10 @@ export interface AppContainer {
     recurringPayments: RecurringPaymentService;
     errorLog: ErrorLogService;
     stellarFee: StellarFeeService;
+    deadLetterQueue: DeadLetterQueue;
+    stellarMonitor: StellarMonitorService;
+    authRiskEngine: AuthRiskEngine;
+    settlementAnalytics: SettlementAnalyticsService;
   };
 }
 
@@ -73,7 +81,8 @@ export function createContainer(): AppContainer {
     fraud,
     eventBus,
   );
-  const transferQueue = new TransferQueue(transfers, eventBus);
+  const deadLetterQueue = new DeadLetterQueue(eventBus);
+  const transferQueue = new TransferQueue(transfers, eventBus, deadLetterQueue);
   const health = new SystemHealthService(compliance, wallets);
   const accessGuard = new AccessGuardService();
   const recurringPaymentRepository = new InMemoryRecurringPaymentRepository();
@@ -85,8 +94,12 @@ export function createContainer(): AppContainer {
   const complianceLog = new ComplianceLogService(eventBus);
   const errorLog = new ErrorLogService(eventBus);
   const stellarFee = new StellarFeeService();
+  const stellarMonitor = new StellarMonitorService(errorLog);
+  const authRiskEngine = new AuthRiskEngine(eventBus);
+  const settlementAnalytics = new SettlementAnalyticsService(eventBus);
 
   recurringWorker.start();
+  stellarMonitor.start();
 
   registerTransferEventHandlers({
     eventBus,
@@ -125,6 +138,10 @@ export function createContainer(): AppContainer {
       recurringPayments,
       errorLog,
       stellarFee,
+      deadLetterQueue,
+      stellarMonitor,
+      authRiskEngine,
+      settlementAnalytics,
     },
   };
 }

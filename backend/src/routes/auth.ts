@@ -83,6 +83,16 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (isMariaIdentifier(identifier)) {
       const session = createMariaSession();
       await setAuthCookie(reply, session);
+
+      fastify.container.services.authRiskEngine.recordAuthEvent({
+        userId: session.id,
+        type: 'login',
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        success: true,
+        timestamp: new Date().toISOString(),
+      });
+
       return reply.send({
         needsVerification: false,
         isNewUser: false,
@@ -94,12 +104,32 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const session = createNewUserSession(isEmail ? identifier.toLowerCase() : undefined, isEmail ? undefined : identifier);
     await setAuthCookie(reply, session);
+
+    const riskAssessment = fastify.container.services.authRiskEngine.assessRisk(
+      session.id,
+      request.ip,
+      request.headers['user-agent'],
+    );
+    fastify.container.services.authRiskEngine.recordAuthEvent({
+      userId: session.id,
+      type: 'login',
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
+
     return reply.send({
       needsVerification: true,
       isNewUser: true,
       authUser: sessionToAuthUser(session),
       session: getSessionInfo(session),
       user: null,
+      riskAssessment: {
+        level: riskAssessment.level,
+        requiresStepUp: riskAssessment.requiresStepUp,
+        factors: riskAssessment.factors,
+      },
     });
   });
 
@@ -112,6 +142,16 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const isEmail = identifier.includes('@');
     const session = createNewUserSession(isEmail ? identifier.toLowerCase() : undefined, isEmail ? undefined : identifier);
     await setAuthCookie(reply, session);
+
+    fastify.container.services.authRiskEngine.recordAuthEvent({
+      userId: session.id,
+      type: 'login',
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
+
     return reply.send({
       needsVerification: true,
       authUser: sessionToAuthUser(session),
@@ -141,6 +181,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     if (!isValidVerificationCode(code)) {
       verifyRateLimiter.recordAttempt(session.id);
+      fastify.container.services.authRiskEngine.recordAuthEvent({
+        userId: session.id,
+        type: 'verify_attempt',
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        success: false,
+        timestamp: new Date().toISOString(),
+      });
       const locked = verifyRateLimiter.isLimited(session.id);
       if (locked) {
         return reply.status(429).send({
@@ -152,6 +200,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     verifyRateLimiter.reset(session.id);
+    fastify.container.services.authRiskEngine.recordAuthEvent({
+      userId: session.id,
+      type: 'verify',
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
     session.verified = true;
     if (!session.hasWallet) {
       session.onboardingCompleted = false;

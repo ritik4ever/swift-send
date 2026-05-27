@@ -18,6 +18,10 @@ interface SetRoleBody {
   role: 'admin' | 'user';
 }
 
+interface DlqRetryBody {
+  jobId: string;
+}
+
 export default async function adminRoutes(fastify: FastifyInstance) {
   const adminGuards = { preHandler: [requireVerifiedSession, requireRole('admin')] };
 
@@ -81,4 +85,122 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       return { userId, role };
     },
   );
+
+  /** Dead Letter Queue Management */
+
+  /** GET /admin/dlq — view all DLQ entries */
+  fastify.get('/admin/dlq', adminGuards, async () => {
+    return fastify.container.services.deadLetterQueue.getAllEntries();
+  });
+
+  /** GET /admin/dlq/stats — DLQ statistics */
+  fastify.get('/admin/dlq/stats', adminGuards, async () => {
+    return fastify.container.services.deadLetterQueue.getStats();
+  });
+
+  /** GET /admin/dlq/:jobId — view single DLQ entry */
+  fastify.get<{ Params: { jobId: string } }>(
+    '/admin/dlq/:jobId',
+    adminGuards,
+    async (req, reply) => {
+      const entry = fastify.container.services.deadLetterQueue.getEntry(req.params.jobId);
+      if (!entry) {
+        return reply.code(404).send({ error: 'DLQ entry not found' });
+      }
+      return entry;
+    },
+  );
+
+  /** POST /admin/dlq/retry — retry a single DLQ entry */
+  fastify.post<{ Body: DlqRetryBody }>(
+    '/admin/dlq/retry',
+    adminGuards,
+    async (req, reply) => {
+      const { jobId } = req.body ?? {};
+      if (!jobId) {
+        return reply.code(400).send({ error: '`jobId` is required' });
+      }
+
+      const transfers = fastify.container.services.transfers;
+      const entry = await fastify.container.services.deadLetterQueue.retryJob(
+        jobId,
+        async (command) => transfers.createTransfer(command),
+      );
+
+      if (!entry) {
+        return reply.code(404).send({ error: 'DLQ entry not found' });
+      }
+
+      return entry;
+    },
+  );
+
+  /** POST /admin/dlq/retry-all — retry all pending DLQ entries */
+  fastify.post('/admin/dlq/retry-all', adminGuards, async () => {
+    const transfers = fastify.container.services.transfers;
+    const result = await fastify.container.services.deadLetterQueue.retryAll(
+      async (command) => transfers.createTransfer(command),
+    );
+    return result;
+  });
+
+  /** POST /admin/dlq/:jobId/discard — discard a DLQ entry */
+  fastify.post<{ Params: { jobId: string } }>(
+    '/admin/dlq/:jobId/discard',
+    adminGuards,
+    async (req, reply) => {
+      const discarded = fastify.container.services.deadLetterQueue.discardEntry(req.params.jobId);
+      if (!discarded) {
+        return reply.code(404).send({ error: 'DLQ entry not found' });
+      }
+      return { discarded: true, jobId: req.params.jobId };
+    },
+  );
+
+  /** POST /admin/dlq/purge — purge all discarded DLQ entries */
+  fastify.post('/admin/dlq/purge', adminGuards, async () => {
+    const purged = fastify.container.services.deadLetterQueue.purgeDiscarded();
+    return { purged };
+  });
+
+  /** Settlement Analytics */
+
+  /** GET /admin/settlements/analytics — settlement performance analytics */
+  fastify.get('/admin/settlements/analytics', adminGuards, async (req)  => {
+    const query = req.query as { days?: string };
+    const days = Number(query.days) || 30;
+    return fastify.container.services.settlementAnalytics.getAnalytics(days);
+  });
+
+  /** GET /admin/settlements/trend — settlement time trend */
+  fastify.get('/admin/settlements/trend', adminGuards, async (req) => {
+    const query = req.query as { days?: string; bucketDays?: string };
+    const days = Number(query.days) || 30;
+    const bucketDays = Number(query.bucketDays) || 1;
+    return fastify.container.services.settlementAnalytics.getSettlementTimeTrend(days, bucketDays);
+  });
+
+  /** GET /admin/settlements/failed — failed transfers list */
+  fastify.get('/admin/settlements/failed', adminGuards, async (req) => {
+    const query = req.query as { days?: string; limit?: string };
+    const days = Number(query.days) || 7;
+    const limit = Number(query.limit) || 50;
+    return fastify.container.services.settlementAnalytics.getFailedTransfers(days, limit);
+  });
+
+  /** Stellar Monitor */
+
+  /** GET /admin/stellar/monitor — stellar monitor state */
+  fastify.get('/admin/stellar/monitor', adminGuards, async () => {
+    return fastify.container.services.stellarMonitor.getState();
+  });
+
+  /** Auth Risk Suspicious Activity */
+
+  /** GET /admin/auth/suspicious — suspicious auth activity */
+  fastify.get('/admin/auth/suspicious', adminGuards, async (req) => {
+    const query = req.query as { limit?: string };
+    const limit = Number(query.limit) || 50;
+    return fastify.container.services.authRiskEngine.getSuspiciousActivity(limit);
+  });
 }

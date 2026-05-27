@@ -3,6 +3,7 @@ import { EventBus } from '../../core/eventBus';
 import { TransferLifecycle } from './transferLifecycle';
 import { CreateTransferCommand } from './domain';
 import { TransferEventType } from './events';
+import { DeadLetterQueue } from './deadLetterQueue';
 
 export interface QueuedTransferJob {
   id: string;
@@ -35,7 +36,8 @@ export class TransferQueue {
 
   constructor(
     private readonly transfers: TransferLifecycle,
-    private readonly eventBus: EventBus
+    private readonly eventBus: EventBus,
+    private readonly deadLetterQueue?: DeadLetterQueue,
   ) {}
 
   /**
@@ -127,6 +129,14 @@ export class TransferQueue {
             job.completedAt = new Date().toISOString();
 
             logger.error({ retries: job.retries, error: job.error }, 'transfer processing failed after retries');
+
+            if (this.deadLetterQueue) {
+              this.deadLetterQueue.addEntry(
+                { ...job },
+                job.error || 'Unknown error',
+                job.retries,
+              );
+            }
 
             await this.eventBus.publish({
               type: TransferEventType.QueueFailed,

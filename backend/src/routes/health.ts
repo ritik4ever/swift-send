@@ -27,4 +27,14 @@ export default async function healthRoutes(fastify: FastifyInstance) {
       timestamp: new Date().toISOString(),
     };
   });
+
+  // Stellar network monitoring state
+  fastify.get('/health/stellar', async () => {
+    const state = fastify.container.services.stellarMonitor.getState();
+    return {
+      status: state.currentStatus === 'online' ? 'operational' : state.degradedSince ? 'degraded' : 'operational',
+      monitor: state,
+      timestamp: new Date().toISOString(),
+    };
+  });
 }
